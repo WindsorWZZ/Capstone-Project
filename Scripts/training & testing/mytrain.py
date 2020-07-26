@@ -1,8 +1,10 @@
+#This script calls the modules from detectron2 and train a Mask R-CNN model
+
+#import all the modules
 import os
 import cv2
 import logging
 from collections import OrderedDict
-
 import detectron2.utils.comm as comm
 from detectron2.utils.visualizer import Visualizer
 from detectron2.checkpoint import DetectionCheckpointer
@@ -25,23 +27,16 @@ from detectron2.modeling import GeneralizedRCNNWithTTA
 from detectron2.data.datasets import register_coco_instances
 import pycocotools
 from detectron2.data.datasets import register_coco_instances
-# fmt: off
-#CLASS_NAMES = ['obj_1','obj_2','obj_3']
-# 数据集路径
-TRAIN_ROOT = '/home/wzz/Downloads/T-LESS/myData/trainSet'
-VAL_ROOT = '/home/wzz/Downloads/T-LESS/myData/val_09'
-TRAIN_PATH = os.path.join(TRAIN_ROOT, 'aug_image')
-#TRAIN_PATH = os.path.join(TRAIN_ROOT, 'image')
+
+#Set the path to our datasets
+TRAIN_ROOT = '/path/to/training/set/root'
+VAL_ROOT = '/path/to/validation/root'
+TRAIN_PATH = os.path.join(TRAIN_ROOT, 'aug_image') #<or> TRAIN_PATH = os.path.join(TRAIN_ROOT, 'image')
 VAL_PATH = VAL_ROOT
 TRAIN_JSON = os.path.join(TRAIN_ROOT, 'train.json')
 VAL_JSON = os.path.join(VAL_ROOT, 'annotations.json')
 
-## try COCO
-#TRAIN_PATH = '/home/wzz/Downloads/detectron2/datasets/coco/train2017'
-#VAL_PATH = '/home/wzz/Downloads/detectron2/datasets/coco/val2017'
-#TRAIN_JSON = '/home/wzz/Downloads/detectron2/datasets/coco/annotations/instances_train2017.json'
-#VAL_JSON = '/home/wzz/Downloads/detectron2/datasets/coco/annotations/instances_val2017.json'
-
+#Register our dataset in detectron2
 register_coco_instances("coco_my_train", {}, TRAIN_JSON, TRAIN_PATH)
 register_coco_instances("coco_my_val", {}, VAL_JSON, VAL_PATH)
 MetadataCatalog.get("coco_my_train")
@@ -49,69 +44,22 @@ DatasetCatalog.get("coco_my_train")
 MetadataCatalog.get("coco_my_val")
 DatasetCatalog.get("coco_my_val")
 
-# 数据集的子集
 PREDEFINED_SPLITS_DATASET = {
     "coco_my_train": (TRAIN_PATH, TRAIN_JSON),
     "coco_my_test": (VAL_PATH, VAL_JSON),
 }
 
-
-def register_dataset():
-    """
-    purpose: register all splits of dataset with PREDEFINED_SPLITS_DATASET
-    """
-    for key, (image_root, json_file) in PREDEFINED_SPLITS_DATASET.items():
-        register_dataset_instances(name=key,
-                                   json_file=json_file,
-                                   image_root=image_root)
-
-
-
-def register_dataset_instances(name, json_file, image_root):
-    """
-    purpose: register dataset to DatasetCatalog,
-             register metadata to MetadataCatalog and set attribute
-    """
-    DatasetCatalog.register(name, lambda: load_coco_json(json_file, image_root, name))
-    MetadataCatalog.get(name).set(json_file=json_file,
-                                  image_root=image_root,
-                                  evaluator_type="coco")
-
-
-# 注册数据集和元数据
-def plain_register_dataset():
-
-    DatasetCatalog.register("coco_my_train", lambda: load_coco_json(TRAIN_JSON, TRAIN_PATH))
-    MetadataCatalog.get("coco_my_train").set(#thing_classes=CLASS_NAMES,  # 可以选择开启，但是不能显示中文，所以本人关闭
-                                                    evaluator_type='coco', # 指定评估方式
-                                                    json_file=TRAIN_JSON,
-                                                    image_root=TRAIN_PATH)
-
-    #DatasetCatalog.register("coco_my_val", lambda: load_coco_json(VAL_JSON, VAL_PATH, "coco_2017_val"))
-    DatasetCatalog.register("coco_my_val", lambda: load_coco_json(VAL_JSON, VAL_PATH))
-    MetadataCatalog.get("coco_my_val").set(#thing_classes=CLASS_NAMES, # 可以选择开启，但是不能显示中文，所以本人关闭
-                                                evaluator_type='coco', # 指定评估方式
-                                                json_file=VAL_JSON,
-                                                image_root=VAL_PATH)
-
-
-# 查看数据集标注
+# check the label info of our dataset
 def checkout_dataset_annotation(name="coco_my_val"):
-    #dataset_dicts = load_coco_json(TRAIN_JSON, TRAIN_PATH, name)
     dataset_dicts = load_coco_json(TRAIN_JSON, TRAIN_PATH)
     print(len(dataset_dicts))
     for i, d in enumerate(dataset_dicts,0):
-        #print(d)
         img = cv2.imread(d["file_name"])
         visualizer = Visualizer(img[:, :, ::-1], metadata=MetadataCatalog.get(name), scale=1.5)
         vis = visualizer.draw_dataset_dict(d)
-        #cv2.imshow('show', vis.get_image()[:, :, ::-1])
         cv2.imwrite('out/'+str(i) + '.jpg',vis.get_image()[:, :, ::-1])
-        #cv2.waitKey(0)
         if i == 200:
             break
-
-
 
 class Trainer(DefaultTrainer):
     @classmethod
@@ -182,63 +130,67 @@ def setup(args):
     Create configs and perform basic setups.
     """
     cfg = get_cfg() # 拷贝default config副本
-    #args.config_file = "/home/wzz/Downloads/detectron2/configs/COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml"
-
-    args.config_file = "/home/wzz/Downloads/detectron2/configs/COCO-InstanceSegmentation/mask_rcnn_R_101_FPN_3x.yaml"
+    add_vovnet_config(cfg)
+    #set the config file, determine the backbone structure
+    args.config_file = "/home/wzz/Downloads/detectron2/configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"
 
     args.num_gpus = 2
-    cfg.merge_from_file(args.config_file)   # 从config file 覆盖配置
-    cfg.merge_from_list(args.opts)          # 从CLI参数 覆盖配置
+    cfg.merge_from_file(args.config_file)   
+    cfg.merge_from_list(args.opts)          # the setting can also merge from terminal input
 
-    # 更改配置参数
-    cfg.DATASETS.TRAIN = ("coco_my_train",) # 训练数据集名称
+    # Set the training parameters manually
+    cfg.DATASETS.TRAIN = ("coco_my_train",) # Name of training/testing dataset
     cfg.DATASETS.TEST = ("coco_my_val",)
-    cfg.DATALOADER.NUM_WORKERS = 10  # 单线程
+    cfg.DATALOADER.NUM_WORKERS = 10  
 
-    cfg.INPUT.CROP.ENABLED = True
-    cfg.INPUT.MAX_SIZE_TRAIN = 500 # 训练图片输入的最大尺寸
-    cfg.INPUT.MIN_SIZE_TRAIN = (100, 500) # 训练图片输入的最小尺寸，可以吃定为多尺度训练
+    cfg.INPUT.CROP.ENABLED = True         #Enable croping(part of online augmentation)
+    cfg.INPUT.MAX_SIZE_TRAIN = 500        #Max size of training image
+    cfg.INPUT.MIN_SIZE_TRAIN = (100, 500) #size range of training image
 
-## fix size
-    #cfg.INPUT.MAX_SIZE_TRAIN = 500 # 训练图片输入的最大尺寸
-    #cfg.INPUT.MIN_SIZE_TRAIN = 500 # 训练图片输入的最小尺寸，可以吃定为多尺度训练
+    ## fix size
+    #cfg.INPUT.MAX_SIZE_TRAIN = 500 
+    #cfg.INPUT.MIN_SIZE_TRAIN = 500 
 
-    cfg.INPUT.MAX_SIZE_TEST = 2560 # 测试数据输入的最大尺寸
+    cfg.INPUT.MAX_SIZE_TEST = 2560 # max size of testing image
     cfg.INPUT.MIN_SIZE_TEST = 1920
-    cfg.INPUT.MIN_SIZE_TRAIN_SAMPLING = 'range'
+    cfg.INPUT.MIN_SIZE_TRAIN_SAMPLING = 'range' #set image input mode to 'range'
 
+    #class name = ['obj_1', 'obj_2', 'obj_3']
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = 3
-    cfg.MODEL.WEIGHTS = "/home/wzz/Downloads/T-LESS/pretrain/R101-FPN.pkl"
-    #cfg.MODEL.WEIGHTS = os.path.join(cfg.OUTPUT_DIR, "model_final.pth")
-    cfg.SOLVER.IMS_PER_BATCH = 8  # batch_size=2; iters_in_one_epoch = dataset_imgs/batch_size
+    #use pretrained model
+    cfg.MODEL.WEIGHTS = "path/to/pretrain/model"
+    #can also use:
+    #model_path = "/home/wzz/Downloads/T-LESS/t_less_demo/successful outputs/new_res101/no_aug"
+    #cfg.MODEL.WEIGHTS = os.path.join(model_path, "model_0001331.pth")
 
-    # 根据训练数据总数目以及batch_size，计算出每个epoch需要的迭代次数
+    cfg.SOLVER.IMS_PER_BATCH = 8  # batch_size=8; iters_in_one_epoch = dataset_imgs/batch_size
+
+    # calculate the iteration times of each epoch
     ITERS_IN_ONE_EPOCH = int(600 / cfg.SOLVER.IMS_PER_BATCH)
 
-    # 指定最大迭代次数
-    cfg.SOLVER.MAX_ITER = 5000
+    # set the max iterations
+    cfg.SOLVER.MAX_ITER = 4000
     #cfg.SOLVER.MAX_ITER = (ITERS_IN_ONE_EPOCH * 100) - 1 # 12 epochs，
-    # 初始学习率
+    # Initial learning rate
     cfg.SOLVER.BASE_LR = 0.0002
-    # 优化器动能
+    # optimizer momentum
     cfg.SOLVER.MOMENTUM = 0.9
-    #权重衰减
+    # weight decay parameters
     cfg.SOLVER.WEIGHT_DECAY = 0.0001
     cfg.SOLVER.WEIGHT_DECAY_NORM = 0.0
-    # 学习率衰减倍数
+    # learning rate decay parameter
     cfg.SOLVER.GAMMA = 0.1
-    # 迭代到指定次数，学习率进行衰减
+    # Learning rate decay beginning step
     cfg.SOLVER.STEPS = (7000,)
-    # 在训练之前，会做一个热身运动，学习率慢慢增加初始学习率
+    # Warm up factor before training
     cfg.SOLVER.WARMUP_FACTOR = 1.0 / 1000
-    # 热身迭代次数
+    # Warmup iterations
     cfg.SOLVER.WARMUP_ITERS = 1000
     cfg.SOLVER.WARMUP_METHOD = "linear"
-    # 保存模型文件的命名数据减1
+    
     cfg.SOLVER.CHECKPOINT_PERIOD = ITERS_IN_ONE_EPOCH - 1
 
-    # 迭代到指定次数，进行一次评估
-    #cfg.TEST.EVAL_PERIOD = ITERS_IN_ONE_EPOCH
+    # The period of cross evaluation
     cfg.TEST.EVAL_PERIOD = 200
 
 
@@ -249,16 +201,11 @@ def setup(args):
 
 def main(args):
     cfg = setup(args)
-    #print(cfg)
 
-    # 注册数据集
-    #plain_register_dataset()
+    # check annotations
+    checkout_dataset_annotation()
 
-    # 检测数据集注释是否正确
-    #checkout_dataset_annotation()
-
-
-    # 如果只是进行评估
+    # if we use the model for evaluation:
     if args.eval_only:
         model = Trainer.build_model(cfg)
         DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
