@@ -23,8 +23,7 @@ python mytrain.py --eval-only
 2. train_net.py: Same as ``mytrain.py``, using vovnet backbone.   
 3. viewResult.py: Visualize the inference results. 
 ***Reference:***
-[https://blog.csdn.net/weixin_39916966/article/details/103299051](https://blog.csdn.net/weixin_39916966/article/details/103299051)        
-
+[https://blog.csdn.net/weixin_39916966/article/details/103299051](https://blog.csdn.net/weixin_39916966/article/details/103299051)    
 [https://www.dlology.com/blog/how-to-train-detectron2-with-custom-coco-datasets/](https://www.dlology.com/blog/how-to-train-detectron2-with-custom-coco-datasets/)    
 
 ## Dataset Generating
